@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Muistipeli</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Press Start 2P (Minecraft-tyylinen fontti) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* Asetetaan mukautettu fontti ja tausta */
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-image: url('https://www.transparenttextures.com/patterns/cubes.png');
+            background-color: #383838;
+        }
+
+        /* Kortin kääntymisanimaatio */
+        .game-board {
+            perspective: 1000px;
+        }
+
+        .card {
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2), 0 10px 10px rgba(0,0,0,0.2);
+        }
+
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .card-face--back {
+            transform: rotateY(180deg);
+        }
+
+        /* Kuvan sovitus korttiin pikselimäisenä */
+        .card-face img {
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-white flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="text-center mb-8">
+        <h1 class="text-4xl md:text-6xl text-green-400" style="text-shadow: 3px 3px #222;">Minecraft Muistipeli</h1>
+        <p class="text-gray-300 mt-2">Löydä kaikki parit!</p>
+    </div>
+
+    <!-- Pelin tilatiedot -->
+    <div class="flex space-x-8 mb-6 text-xl">
+        <div>
+            <span class="text-yellow-400">Siirrot:</span>
+            <span id="moves-counter">0</span>
+        </div>
+        <div>
+            <span class="text-yellow-400">Löydetyt parit:</span>
+            <span id="pairs-found">0</span> / 8
+        </div>
+    </div>
+    
+    <!-- Pelilauta -->
+    <div id="game-board" class="game-board grid grid-cols-4 gap-4 w-full max-w-lg md:max-w-xl mx-auto">
+        <!-- Kortit luodaan JavaScriptillä -->
+    </div>
+
+    <!-- Uudelleenkäynnistysnappi -->
+    <button id="restart-button" class="mt-8 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg border-b-4 border-green-800 hover:border-green-900 active:border-b-0 active:mt-9 transition-all duration-100 ease-in-out text-2xl">
+        Aloita alusta
+    </button>
+
+    <!-- Voittoilmoitus (piilotettu oletuksena) -->
+    <div id="win-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+        <div class="bg-gray-700 border-4 border-green-500 p-8 rounded-lg text-center shadow-2xl">
+            <h2 class="text-4xl text-yellow-400 mb-4">Voitit!</h2>
+            <p class="text-xl mb-6">Hienoa työtä, löysit kaikki parit!</p>
+            <p id="win-stats" class="text-lg mb-6"></p>
+            <button id="play-again-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg border-b-4 border-green-800 hover:border-green-900 active:border-b-0 active:mt-1 transition-all duration-100 ease-in-out text-2xl">
+                Pelaa uudestaan
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        const gameBoard = document.getElementById('game-board');
+        const movesCounter = document.getElementById('moves-counter');
+        const pairsFoundCounter = document.getElementById('pairs-found');
+        const restartButton = document.getElementById('restart-button');
+        const playAgainButton = document.getElementById('play-again-button');
+        const winModal = document.getElementById('win-modal');
+        const winStats = document.getElementById('win-stats');
+
+        // Minecraft-aiheiset kuvat
+        const cardImages = [
+            { name: 'creeper', src: 'https://placehold.co/150x150/2E7D32/FFFFFF?text=Creeper' },
+            { name: 'diamond', src: 'https://placehold.co/150x150/4FC3F7/FFFFFF?text=Timantti' },
+            { name: 'tnt', src: 'https://placehold.co/150x150/D32F2F/FFFFFF?text=TNT' },
+            { name: 'pickaxe', src: 'https://placehold.co/150x150/795548/FFFFFF?text=Hakku' },
+            { name: 'crafting_table', src: 'https://placehold.co/150x150/A1887F/FFFFFF?text=Pöytä' },
+            { name: 'dirt', src: 'https://placehold.co/150x150/6D4C41/FFFFFF?text=Maa' },
+            { name: 'pig', src: 'https://placehold.co/150x150/F48FB1/FFFFFF?text=Porsas' },
+            { name: 'steve', src: 'https://placehold.co/150x150/00838F/FFFFFF?text=Steve' },
+        ];
+        
+        // Luodaan korteista parit
+        const gameCards = [...cardImages, ...cardImages];
+
+        let hasFlippedCard = false;
+        let lockBoard = false;
+        let firstCard, secondCard;
+        let moves = 0;
+        let pairsFound = 0;
+
+        // Sekoitetaan kortit
+        function shuffle(array) {
+            array.sort(() => Math.random() - 0.5);
+        }
+        
+        // Luodaan pelilauta
+        function createBoard() {
+            // Nollataan pelilauta ja tiedot
+            gameBoard.innerHTML = '';
+            moves = 0;
+            pairsFound = 0;
+            movesCounter.textContent = moves;
+            pairsFoundCounter.textContent = pairsFound;
+            
+            shuffle(gameCards);
+
+            gameCards.forEach(cardInfo => {
+                const card = document.createElement('div');
+                card.classList.add('card', 'relative', 'w-20', 'h-20', 'md:w-24', 'md:h-24', 'cursor-pointer');
+                card.dataset.name = cardInfo.name;
+
+                // Kortin etupuoli (kysymysmerkki)
+                const cardFaceFront = document.createElement('div');
+                cardFaceFront.classList.add('card-face', 'card-face--front', 'bg-yellow-600', 'rounded-lg', 'flex', 'items-center', 'justify-center', 'text-4xl', 'md:text-5xl', 'border-4', 'border-yellow-800');
+                cardFaceFront.textContent = '?';
+                
+                // Kortin takapuoli (kuva)
+                const cardFaceBack = document.createElement('div');
+                cardFaceBack.classList.add('card-face', 'card-face--back', 'bg-gray-600', 'rounded-lg', 'p-2', 'border-4', 'border-gray-800');
+                
+                const img = document.createElement('img');
+                img.src = cardInfo.src;
+                img.classList.add('w-full', 'h-full', 'object-cover', 'rounded-md');
+                img.alt = cardInfo.name;
+
+                cardFaceBack.appendChild(img);
+                card.appendChild(cardFaceFront);
+                card.appendChild(cardFaceBack);
+
+                card.addEventListener('click', flipCard);
+                gameBoard.appendChild(card);
+            });
+        }
+
+        // Käännetään kortti
+        function flipCard() {
+            if (lockBoard) return;
+            if (this === firstCard) return;
+
+            this.classList.add('is-flipped');
+
+            if (!hasFlippedCard) {
+                // Ensimmäinen kortti
+                hasFlippedCard = true;
+                firstCard = this;
+                return;
+            }
+
+            // Toinen kortti
+            secondCard = this;
+            incrementMoves();
+            checkForMatch();
+        }
+
+        // Tarkistetaan, ovatko kortit samat
+        function checkForMatch() {
+            let isMatch = firstCard.dataset.name === secondCard.dataset.name;
+            isMatch ? disableCards() : unflipCards();
+        }
+
+        // Poistetaan kortit pelistä, jos ne ovat pari
+        function disableCards() {
+            firstCard.removeEventListener('click', flipCard);
+            secondCard.removeEventListener('click', flipCard);
+            
+            pairsFound++;
+            pairsFoundCounter.textContent = pairsFound;
+
+            resetBoard();
+            
+            // Tarkista voitto
+            if(pairsFound === cardImages.length) {
+                setTimeout(() => {
+                    winStats.textContent = `Tarvitsit ${moves} siirtoa.`;
+                    winModal.classList.remove('hidden');
+                }, 500);
+            }
+        }
+
+        // Käännetään kortit takaisin, jos ne eivät ole pari
+        function unflipCards() {
+            lockBoard = true;
+            setTimeout(() => {
+                firstCard.classList.remove('is-flipped');
+                secondCard.classList.remove('is-flipped');
+                resetBoard();
+            }, 1200);
+        }
+        
+        // Nollataan korttivalinnat
+        function resetBoard() {
+            [hasFlippedCard, lockBoard] = [false, false];
+            [firstCard, secondCard] = [null, null];
+        }
+
+        // Kasvatetaan siirtolaskuria
+        function incrementMoves() {
+            moves++;
+            movesCounter.textContent = moves;
+        }
+        
+        // Uudelleenkäynnistysfunktio
+        function restartGame() {
+            winModal.classList.add('hidden');
+            createBoard();
+            resetBoard();
+        }
+
+        // Lisätään tapahtumakuuntelijat napeille
+        restartButton.addEventListener('click', restartGame);
+        playAgainButton.addEventListener('click', restartGame);
+        
+        // Käynnistetään peli ensimmäisen kerran
+        createBoard();
+    </script>
+</body>
+</html>
